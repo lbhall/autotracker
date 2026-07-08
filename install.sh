@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 #
-# One-time server setup for the autotracker app.
-# Installs the gunicorn systemd socket + service and the nginx site,
-# then enables and starts everything. Re-running is safe (idempotent).
+# Server setup for the autotracker app. Prompts before each section so you can
+# install/reconfigure just the pieces you need. Re-running is safe (idempotent).
 #
 # Run as root (or with sudo):  sudo ./install.sh
 set -euo pipefail
@@ -14,11 +13,6 @@ APP_DIR="/var/www/${DOMAIN}/source"
 VENV="/var/www/${DOMAIN}/venv/bin"
 RUN_USER="www-data"
 RUN_GROUP="www-data"
-
-# TLS: set ENABLE_SSL=false to skip certbot and serve HTTP only.
-# certbot's nginx plugin adds the 443 server block + HTTP->HTTPS redirect to the
-# site conf and installs an auto-renewal timer.
-ENABLE_SSL="true"
 CERTBOT_EMAIL="beau.hall@wikifri.com"
 
 SOCK="/run/gunicorn-${APP_NAME}.sock"
@@ -31,9 +25,26 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-# ── gunicorn socket ─────────────────────────────────────────────────────────
-echo "==> Writing /etc/systemd/system/${SOCKET_UNIT}"
-cat > "/etc/systemd/system/${SOCKET_UNIT}" <<EOF
+# Ask a yes/no question (default Yes). Returns success on yes.
+# Pass -y / --yes on the command line to auto-confirm every section.
+AUTO_YES="false"
+[[ "${1:-}" == "-y" || "${1:-}" == "--yes" ]] && AUTO_YES="true"
+
+confirm() {
+    if [[ "${AUTO_YES}" == "true" ]]; then
+        echo "==> ${1} [auto-yes]"
+        return 0
+    fi
+    local reply
+    read -r -p "==> ${1} [Y/n] " reply
+    reply="${reply:-Y}"
+    [[ "${reply}" =~ ^[Yy]$ ]]
+}
+
+# ── gunicorn (socket + service) ─────────────────────────────────────────────
+install_gunicorn() {
+    echo "  - Writing /etc/systemd/system/${SOCKET_UNIT}"
+    cat > "/etc/systemd/system/${SOCKET_UNIT}" <<EOF
 [Unit]
 Description=gunicorn socket for ${APP_NAME}
 
@@ -47,9 +58,8 @@ SocketMode=0660
 WantedBy=sockets.target
 EOF
 
-# ── gunicorn service ────────────────────────────────────────────────────────
-echo "==> Writing /etc/systemd/system/${SERVICE}"
-cat > "/etc/systemd/system/${SERVICE}" <<EOF
+    echo "  - Writing /etc/systemd/system/${SERVICE}"
+    cat > "/etc/systemd/system/${SERVICE}" <<EOF
 [Unit]
 Description=gunicorn daemon for ${APP_NAME}
 Requires=${SOCKET_UNIT}
@@ -71,9 +81,16 @@ Restart=on-failure
 WantedBy=multi-user.target
 EOF
 
+    echo "  - Reloading systemd, enabling socket, restarting service"
+    systemctl daemon-reload
+    systemctl enable --now "${SOCKET_UNIT}"
+    systemctl restart "${SERVICE}"
+}
+
 # ── nginx site ──────────────────────────────────────────────────────────────
-echo "==> Writing /etc/nginx/sites-available/${NGINX_SITE}"
-cat > "/etc/nginx/sites-available/${NGINX_SITE}" <<EOF
+install_nginx() {
+    echo "  - Writing /etc/nginx/sites-available/${NGINX_SITE}"
+    cat > "/etc/nginx/sites-available/${NGINX_SITE}" <<EOF
 server {
     listen 80;
     server_name ${DOMAIN};
@@ -96,39 +113,40 @@ server {
 }
 EOF
 
-echo "==> Enabling nginx site (symlinking into sites-enabled)"
-ln -sf "/etc/nginx/sites-available/${NGINX_SITE}" "/etc/nginx/sites-enabled/${NGINX_SITE}"
-
-# ── Reload / enable / start ─────────────────────────────────────────────────
-echo "==> Reloading systemd and starting the gunicorn socket"
-systemctl daemon-reload
-systemctl enable --now "${SOCKET_UNIT}"
-# Restart the service so it picks up any new code/config if already running.
-systemctl restart "${SERVICE}"
-
-echo "==> Testing nginx config"
-nginx -t
-
-echo "==> Restarting nginx"
-systemctl restart nginx
+    echo "  - Symlinking into sites-enabled and reloading nginx"
+    ln -sf "/etc/nginx/sites-available/${NGINX_SITE}" "/etc/nginx/sites-enabled/${NGINX_SITE}"
+    nginx -t
+    systemctl restart nginx
+}
 
 # ── TLS via Let's Encrypt (certbot) ─────────────────────────────────────────
-if [[ "${ENABLE_SSL}" == "true" ]]; then
-    echo "==> Provisioning TLS certificate with certbot for ${DOMAIN}"
+install_certbot() {
     if ! command -v certbot >/dev/null 2>&1; then
-        echo "certbot is not installed. Install it first, e.g.:" >&2
-        echo "    apt install certbot python3-certbot-nginx" >&2
-        echo "then re-run this script (or run: certbot --nginx -d ${DOMAIN})." >&2
-        exit 1
+        echo "  ! certbot is not installed. Install it first, e.g.:" >&2
+        echo "        apt install certbot python3-certbot-nginx" >&2
+        echo "    then re-run this script (or: certbot --nginx -d ${DOMAIN})." >&2
+        return 1
     fi
+    echo "  - Requesting/installing certificate for ${DOMAIN}"
     # certbot rewrites the site conf to add the 443 block and the redirect.
     certbot --nginx \
         --non-interactive --agree-tos \
         -m "${CERTBOT_EMAIL}" \
         -d "${DOMAIN}" \
         --redirect
-    echo "==> Done. ${APP_NAME} is served at https://${DOMAIN}/ via ${SOCK}"
-else
-    echo "==> Skipping TLS (ENABLE_SSL=${ENABLE_SSL})."
-    echo "==> Done. ${APP_NAME} is served at http://${DOMAIN}/ via ${SOCK}"
+}
+
+# ── Run selected sections ───────────────────────────────────────────────────
+if confirm "Install the gunicorn socket + service?"; then
+    install_gunicorn
 fi
+
+if confirm "Install the nginx site?"; then
+    install_nginx
+fi
+
+if confirm "Obtain/install a TLS certificate with certbot?"; then
+    install_certbot
+fi
+
+echo "==> Done."
