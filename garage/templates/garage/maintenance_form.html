@@ -1,0 +1,14 @@
+{% extends "garage/base.html" %}
+{% block title %}{% if record %}Edit{% else %}Add{% endif %} maintenance · AutoTracker{% endblock %}
+{% block content %}
+  <a class="muted" href="{{ car.get_absolute_url }}">&larr; Back to {{ car.display_name }}</a>
+  <h1>{% if record %}Edit{% else %}Add{% endif %} maintenance</h1>
+  <p class="muted">{{ car.display_name }}</p>
+  <div class="card">
+    <form method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button class="btn" type="submit">Save record</button>
+    </form>
+  </div>
+{% endblock %}

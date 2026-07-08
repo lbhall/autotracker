@@ -1,0 +1,21 @@
+{% extends "garage/base.html" %}
+{% block title %}My Garage · AutoTracker{% endblock %}
+{% block content %}
+  <div class="row" style="justify-content:space-between;">
+    <h1>My Garage</h1>
+    <a class="btn" href="{% url 'garage:add_car' %}">+ Add car</a>
+  </div>
+  {% for car in cars %}
+    <div class="card">
+      <a href="{{ car.get_absolute_url }}">
+        <strong>{{ car.display_name }}</strong>
+        {% if car.nickname %}<span class="muted"> · {{ car.year }} {{ car.make }} {{ car.model }}</span>{% endif %}
+        <div class="muted">
+          {% if car.current_mileage %}{{ car.current_mileage }} mi{% else %}No maintenance logged yet{% endif %}
+        </div>
+      </a>
+    </div>
+  {% empty %}
+    <div class="card muted">Your garage is empty. Add your first car to start tracking maintenance.</div>
+  {% endfor %}
+{% endblock %}

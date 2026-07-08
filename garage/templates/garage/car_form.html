@@ -1,0 +1,13 @@
+{% extends "garage/base.html" %}
+{% block title %}Add car · AutoTracker{% endblock %}
+{% block content %}
+  <a class="muted" href="{% url 'garage:garage' %}">&larr; Back to garage</a>
+  <h1>Add a car</h1>
+  <div class="card">
+    <form method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button class="btn" type="submit">Save car</button>
+    </form>
+  </div>
+{% endblock %}

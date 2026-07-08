@@ -1,0 +1,32 @@
+{% extends "garage/base.html" %}
+{% block title %}{{ car.display_name }} · AutoTracker{% endblock %}
+{% block content %}
+  <a class="muted" href="{% url 'garage:garage' %}">&larr; Back to garage</a>
+  <div class="row" style="justify-content:space-between;">
+    <h1>{{ car.display_name }}</h1>
+    <a class="btn" href="{% url 'garage:add_maintenance' car.pk %}">+ Add maintenance</a>
+  </div>
+  <p class="muted">{{ car.year }} {{ car.make }} {{ car.model }}
+    {% if car.current_mileage %}· {{ car.current_mileage }} mi{% endif %}</p>
+
+  <h2>Maintenance history</h2>
+  {% if records %}
+    <div class="card">
+      <table>
+        <thead><tr><th>Mileage</th><th>Description</th><th>Date</th><th></th></tr></thead>
+        <tbody>
+          {% for record in records %}
+            <tr>
+              <td>{{ record.mileage }} mi</td>
+              <td>{{ record.description }}</td>
+              <td class="muted">{{ record.performed_on }}</td>
+              <td><a href="{% url 'garage:edit_maintenance' record.pk %}">Edit</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="card muted">No maintenance recorded yet.</div>
+  {% endif %}
+{% endblock %}
