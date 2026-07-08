@@ -104,7 +104,7 @@ echo "==> Reloading systemd and starting the gunicorn socket"
 systemctl daemon-reload
 systemctl enable --now "${SOCKET_UNIT}"
 # Restart the service so it picks up any new code/config if already running.
-systemctl restart "${SERVICE}" || true
+systemctl restart "${SERVICE}"
 
 echo "==> Testing nginx config"
 nginx -t

@@ -25,7 +25,11 @@ SECRET_KEY = 'django-insecure-av!ay0_c))$knl+0c*^f^9v4vkd5y5!tshp5c45&tbq@qoffg!
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['autotracker.emcfunleague.com', 'localhost', '127.0.0.1']
+
+# Behind the nginx TLS terminator, so trust its forwarded scheme and origin.
+CSRF_TRUSTED_ORIGINS = ['https://autotracker.emcfunleague.com']
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
 # Application definition
