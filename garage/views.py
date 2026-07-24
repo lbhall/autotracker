@@ -1,7 +1,12 @@
+import json
+
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
+from django.db.models import Max
+from django.http import HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
 from .forms import CarForm, MaintenanceRecordForm
 from .models import Car, MaintenanceRecord
@@ -34,11 +39,35 @@ def add_car(request):
         if form.is_valid():
             car = form.save(commit=False)
             car.owner = request.user
+            # Append new cars to the end of the current ordering.
+            next_position = request.user.cars.aggregate(m=Max("position"))["m"]
+            car.position = (next_position or 0) + 1
             car.save()
             return redirect(car)
     else:
         form = CarForm()
     return render(request, "garage/car_form.html", {"form": form})
+
+
+@login_required
+@require_POST
+def reorder_cars(request):
+    try:
+        order = json.loads(request.body)["order"]
+        ordered_ids = [int(pk) for pk in order]
+    except (ValueError, KeyError, TypeError):
+        return HttpResponseBadRequest("Invalid payload")
+
+    # Only reorder cars the user actually owns.
+    owned_ids = set(request.user.cars.values_list("id", flat=True))
+    if set(ordered_ids) != owned_ids:
+        return HttpResponseBadRequest("Order must reference all of your cars exactly once")
+
+    cars_by_id = request.user.cars.in_bulk(ordered_ids)
+    for position, pk in enumerate(ordered_ids):
+        cars_by_id[pk].position = position
+    Car.objects.bulk_update(cars_by_id.values(), ["position"])
+    return JsonResponse({"status": "ok"})
 
 
 @login_required

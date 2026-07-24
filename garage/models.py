@@ -13,10 +13,11 @@ class Car(models.Model):
     make = models.CharField(max_length=100)
     model = models.CharField(max_length=100)
     nickname = models.CharField(max_length=100, blank=True)
+    position = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["year", "make", "model"]
+        ordering = ["position", "year", "make", "model"]
 
     def __str__(self):
         return self.display_name

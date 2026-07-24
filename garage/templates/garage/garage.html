@@ -5,17 +5,79 @@
     <h1>My Garage</h1>
     <a class="btn" href="{% url 'garage:add_car' %}">+ Add car</a>
   </div>
-  {% for car in cars %}
-    <div class="card">
-      <a href="{{ car.get_absolute_url }}">
-        <strong>{{ car.display_name }}</strong>
-        {% if car.nickname %}<span class="muted"> · {{ car.year }} {{ car.make }} {{ car.model }}</span>{% endif %}
-        <div class="muted">
-          {% if car.current_mileage %}{{ car.current_mileage }} mi{% else %}No maintenance logged yet{% endif %}
+  {% if cars %}<p class="muted">Drag the ⠿ handle to reorder your cars.</p>{% endif %}
+  <div id="car-list">
+    {% for car in cars %}
+      <div class="card car" draggable="true" data-car-id="{{ car.pk }}">
+        <div class="row">
+          <span class="drag-handle" title="Drag to reorder" aria-hidden="true">⠿</span>
+          <a href="{{ car.get_absolute_url }}" draggable="false" style="flex:1;">
+            <strong>{{ car.display_name }}</strong>
+            {% if car.nickname %}<span class="muted"> · {{ car.year }} {{ car.make }} {{ car.model }}</span>{% endif %}
+            <div class="muted">
+              {% if car.current_mileage %}{{ car.current_mileage }} mi{% else %}No maintenance logged yet{% endif %}
+            </div>
+          </a>
         </div>
-      </a>
-    </div>
-  {% empty %}
-    <div class="card muted">Your garage is empty. Add your first car to start tracking maintenance.</div>
-  {% endfor %}
+      </div>
+    {% empty %}
+      <div class="card muted">Your garage is empty. Add your first car to start tracking maintenance.</div>
+    {% endfor %}
+  </div>
+
+  <style>
+    #car-list .car { cursor: default; }
+    .drag-handle { cursor: grab; color: var(--muted); font-size: 1.25rem; user-select: none; line-height: 1; }
+    .car.dragging { opacity: .4; }
+  </style>
+
+  <script>
+    (function () {
+      const list = document.getElementById('car-list');
+      if (!list || list.querySelectorAll('.car').length < 2) return;
+      const csrftoken = "{{ csrf_token }}";
+      const reorderUrl = "{% url 'garage:reorder_cars' %}";
+      let dragEl = null;
+
+      list.addEventListener('dragstart', function (e) {
+        dragEl = e.target.closest('.car');
+        if (dragEl) dragEl.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+
+      list.addEventListener('dragend', function () {
+        if (dragEl) dragEl.classList.remove('dragging');
+        dragEl = null;
+        saveOrder();
+      });
+
+      list.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        const dragging = list.querySelector('.dragging');
+        if (!dragging) return;
+        const after = getDragAfterElement(e.clientY);
+        if (after == null) list.appendChild(dragging);
+        else list.insertBefore(dragging, after);
+      });
+
+      function getDragAfterElement(y) {
+        const els = [...list.querySelectorAll('.car:not(.dragging)')];
+        return els.reduce(function (closest, child) {
+          const box = child.getBoundingClientRect();
+          const offset = y - box.top - box.height / 2;
+          if (offset < 0 && offset > closest.offset) return { offset: offset, element: child };
+          return closest;
+        }, { offset: Number.NEGATIVE_INFINITY }).element;
+      }
+
+      function saveOrder() {
+        const order = [...list.querySelectorAll('.car')].map(el => el.dataset.carId);
+        fetch(reorderUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+          body: JSON.stringify({ order: order }),
+        }).catch(function () { /* order will reconcile on next load */ });
+      }
+    })();
+  </script>
 {% endblock %}

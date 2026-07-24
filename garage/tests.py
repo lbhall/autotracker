@@ -39,6 +39,38 @@ class GarageTests(TestCase):
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(Car.objects.filter(owner=self.alice, make="Mazda").exists())
 
+    def test_reorder_cars(self):
+        import json
+
+        car_b = Car.objects.create(owner=self.alice, year=2020, make="Ford", model="Focus")
+        car_c = Car.objects.create(owner=self.alice, year=2021, make="Kia", model="Rio")
+        self.client.force_login(self.alice)
+        new_order = [car_c.pk, self.car.pk, car_b.pk]
+        resp = self.client.post(
+            reverse("garage:reorder_cars"),
+            data=json.dumps({"order": new_order}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            list(self.alice.cars.values_list("pk", flat=True)), new_order
+        )
+
+    def test_reorder_rejects_foreign_or_incomplete_set(self):
+        import json
+
+        bobs_car = Car.objects.create(owner=self.bob, year=2020, make="Ford", model="Focus")
+        self.client.force_login(self.alice)
+        # Includes a car Alice doesn't own -> rejected, order unchanged.
+        resp = self.client.post(
+            reverse("garage:reorder_cars"),
+            data=json.dumps({"order": [self.car.pk, bobs_car.pk]}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.car.refresh_from_db()
+        self.assertEqual(self.car.position, 0)
+
     def test_add_maintenance(self):
         self.client.force_login(self.alice)
         resp = self.client.post(
